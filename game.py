@@ -1,6 +1,6 @@
 from PySide2.QtWidgets import (QGraphicsPixmapItem, QGraphicsView,
-                             QGraphicsScene, QGraphicsRectItem,
-                             QGraphicsItem)
+                               QGraphicsScene, QGraphicsRectItem,
+                               QGraphicsItem)
 from PySide2.QtGui import QPixmap, QVector2D
 from PySide2.QtCore import Qt, QTimer
 import pytmx
