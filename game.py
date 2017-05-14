@@ -1,10 +1,10 @@
-from PySide2.QtWidgets import (QGraphicsPixmapItem, QGraphicsView,
-                               QGraphicsScene, QGraphicsRectItem,
-                               QGraphicsItem)
-from PySide2.QtGui import QPixmap, QVector2D
-from PySide2.QtCore import Qt, QTimer
-import pytmx
 from enum import Enum
+
+import pytmx
+from PySide2.QtCore import (Qt, QTimer, QAbstractTransition)
+from PySide2.QtGui import QPixmap, QVector2D
+from PySide2.QtWidgets import (QGraphicsPixmapItem, QGraphicsView,
+                               QGraphicsScene, QGraphicsItem)
 
 
 class Game(QGraphicsView):
@@ -14,7 +14,7 @@ class Game(QGraphicsView):
         self.window_height = 600
 
         self.scene = QGraphicsScene()
-        self.scale(1.5, 1.5)
+        self.scale(1, 1)
         self.setScene(self.scene)
         self.world = QtTileMap("./res/images/Spritemaps/level1.tmx",
                               scene=self.scene)
@@ -36,22 +36,62 @@ class Character(QGraphicsPixmapItem):
         self.srcImage = QPixmap(fileName)
 
 
-class PlayerStates(Enum):
-    Standing = 1
-    Walking = 2
-    Jumping = 3
+class State():
+    def __init__(self, name):
+        pass
 
 
-class PlayerStateMachine:
-    def __init__(self, startingState):
+class Standing(State):
+    def execute(self):
+        print("I am standing")
+
+
+class Movement(State):
+    def execute(self):
+        print("I am moving")
+
+
+class Jumping(State):
+    def execute(self):
+        print("I am jumping")
+
+
+class Transition():
+    def __init__(self, toState):
+        self.toState = toState
+
+    def execute(self):
+        print("transitioning...")
+
+
+class MovementTransition(Transition):
+    def __init__(self, toState, player):
+        super().__init__(toState)
+        self.player = player
+
+    def execute(self, key):
+        pass
+
+
+class FSM():
+    def __init__(self):
+        self.states = {}
         self.transitions = {}
-        self.currentState = startingState
+        self.curState = None
+        self.curTransition = None
 
-    def handleInput(self, event, isPress):
-        pass
+    def setInitialState(self, name):
+        self.curState = self.states[name]
 
-    def addTransition(self, state, stateAction, nextState):
-        pass
+    def setTransition(self, name):
+        self.curTransition = self.transitions[name]
+
+    def execute(self):
+        if self.curTransition:
+            self.curTransition.execute()
+            self.curState = self.states[self.curTransition.toState]
+            self.curTransition = None
+        self.curState.execute()
 
 
 class Player(Character):
@@ -63,7 +103,7 @@ class Player(Character):
         super().__init__(fileName, parent)
         self.world = world
         self.initialise()
-        self.stateMachine = PlayerStateMachine(PlayerStates.Standing)
+        self.buildInputStateMachine()
         self.setPixmap(self.srcImage.copy(0, 0, 24, 32))
         self.velocity = QVector2D(0, 0)
         self.updateTimer = QTimer()
@@ -71,6 +111,22 @@ class Player(Character):
         self.updateTimer.start(50)
         self.setFlag(QGraphicsItem.ItemIsFocusable, True)
         self.setFocus()
+
+    def buildInputStateMachine(self):
+        self.fsm = FSM()
+        self.fsm.states['Standing'] = Standing('Standing')
+        self.fsm.states['Jumping'] = Jumping('Jumping')
+        self.fsm.transitions['toJumping'] = Transition('Standing')
+        self.fsm.transitions['toStanding'] = Transition('Jumping')
+        self.fsm.setInitialState('Standing')
+#        self.fsm.execute()
+
+def keyPressEvent(    self, event):
+        if event.isAutoRepeat():
+            return
+        if event.key() == Qt.Key_Left:
+            self.fsm.setTransition('toJumping')
+            self.fsm.execute()
 
     def initialise(self):
         for object_ in self.world.objects:
@@ -80,12 +136,6 @@ class Player(Character):
     def update(self):
         self.setPos(self.x(),
                     self.y() + 5)
-
-    def keyPressEvent(self, event):
-        self.stateMachine.handleInput(event, self.EventType.Press)
-
-    def keyReleaseEvent(self, event):
-        self.stateMachine.handleInput(event, self.EventType.Release)
 
 
 class QtTileMap(pytmx.TiledMap):
@@ -112,7 +162,6 @@ class QtTileMap(pytmx.TiledMap):
                     self.scene.addItem(tileItem)
             except AttributeError:
                 pass
-
 
     def qtImageLoader(self, filename, colorkey=False, **kwargs):
         srcImage = QPixmap(filename)
