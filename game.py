@@ -1,5 +1,4 @@
 from enum import Enum
-
 import pytmx
 from PySide2.QtCore import (Qt, QTimer, QAbstractTransition)
 from PySide2.QtGui import QPixmap, QVector2D
@@ -8,6 +7,7 @@ from PySide2.QtWidgets import (QGraphicsPixmapItem, QGraphicsView,
 
 
 class Game(QGraphicsView):
+    """ This is the main game class"""
     def __init__(self, parent=None):
         super().__init__()
         self.window_width = 630
@@ -17,7 +17,7 @@ class Game(QGraphicsView):
         self.scale(1, 1)
         self.setScene(self.scene)
         self.world = QtTileMap("./res/images/Spritemaps/level1.tmx",
-                              scene=self.scene)
+                               scene=self.scene)
         self.world.createPixmapItems()
 
         player = Player("./res/images/character.png", self.world)
@@ -32,13 +32,23 @@ class Game(QGraphicsView):
 class Character(QGraphicsPixmapItem):
     def __init__(self, fileName, rect=None, parent=None):
         super().__init__(parent)
-        print(fileName)
         self.srcImage = QPixmap(fileName)
 
 
 class State():
-    def __init__(self, name):
-        pass
+    pass
+
+
+class StateMachine():
+    def __init__(self, initialState):
+        self.currentState = initialState
+        self.currentState.run()
+
+    def runAll(self, states):
+        for i in states:
+            print(i)
+            self.currentState = self.currentState.next(i)
+            self.currentState.run()
 
 
 class Standing(State):
@@ -72,9 +82,9 @@ class MovementTransition(Transition):
     def execute(self, key):
         pass
 
-
 class FSM():
-    def __init__(self):
+    def __init__(self, char):
+        self.char = char
         self.states = {}
         self.transitions = {}
         self.curState = None
@@ -113,20 +123,11 @@ class Player(Character):
         self.setFocus()
 
     def buildInputStateMachine(self):
-        self.fsm = FSM()
-        self.fsm.states['Standing'] = Standing('Standing')
-        self.fsm.states['Jumping'] = Jumping('Jumping')
-        self.fsm.transitions['toJumping'] = Transition('Standing')
-        self.fsm.transitions['toStanding'] = Transition('Jumping')
-        self.fsm.setInitialState('Standing')
-#        self.fsm.execute()
+        pass
 
-def keyPressEvent(    self, event):
+    def keyPressEvent(self, event):
         if event.isAutoRepeat():
             return
-        if event.key() == Qt.Key_Left:
-            self.fsm.setTransition('toJumping')
-            self.fsm.execute()
 
     def initialise(self):
         for object_ in self.world.objects:
