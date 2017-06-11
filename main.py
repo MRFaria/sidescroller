@@ -8,7 +8,10 @@ if __name__ == '__main__':
         if app:
             pass
     except NameError:
-        app = QApplication(sys.argv)
+        try:
+            app = QApplication(sys.argv)
+        except RuntimeError:
+            app = QApplication.instance()
 
     game = game.Game()
     game.show()

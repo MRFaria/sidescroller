@@ -3,7 +3,8 @@ import pytmx
 from PySide2.QtCore import (Qt, QTimer, QAbstractTransition)
 from PySide2.QtGui import QPixmap, QVector2D
 from PySide2.QtWidgets import (QGraphicsPixmapItem, QGraphicsView,
-                               QGraphicsScene, QGraphicsItem)
+                               QGraphicsScene, QGraphicsItem,
+                               QGraphicsItemGroup)
 
 
 class Game(QGraphicsView):
@@ -35,132 +36,175 @@ class Character(QGraphicsPixmapItem):
         self.srcImage = QPixmap(fileName)
 
 
-class State():
-    pass
+class State:
+    def __init__(self):
+        self.transitions = None
+
+    def next(self, msg):
+        if msg in self.transitions:
+            return self.transitions[msg]
+        else:
+            return self
 
 
-class StateMachine():
+class Falling(State):
+    def __init__(self, character):
+        super().__init__()
+        self.character = character
+
+    def run(self):
+        self.character.velocity.x = 0
+        self.character.velocity.y = 5
+        self.character.acc = 0
+
+    def next(self, msg):
+        # Lazy initialization:
+        if not self.transitions:
+            self.transitions = {
+                'hitGround': self.character.standing
+            }
+        return State.next(self, msg)
+
+
+class WalkingRight(State):
+    def __init__(self, character):
+        super().__init__()
+        self.character = character
+
+    def run(self):
+        self.character.velocity.x = 5
+        self.character.velocity.y = 0
+        self.character.acc = 0
+
+    def next(self, msg):
+        # Lazy initialization:
+        if not self.transitions:
+            self.transitions = {
+                'hitGround': self.character.standing
+            }
+        return State.next(self, msg)
+
+
+class Standing(State):
+    def __init__(self, character):
+        super().__init__()
+        self.character = character
+
+    def run(self):
+        self.character.velocity.x = 0
+        self.character.velocity.y = 0
+        self.character.acc = 0
+
+    def next(self, msg):
+        # Lazy initialization:
+        if not self.transitions:
+            self.transitions = {
+                'fall': self.character.falling
+            }
+            self.transitions = {
+                'jump': self.character.jumping
+            }
+
+        return State.next(self, msg)
+
+
+class Jumping(State):
+    def __init__(self, character):
+        super().__init__()
+        self.character = character
+
+    def run(self):
+        self.character.velocity.x = 0
+        self.character.velocity.y = -10
+        self.character.acc = 1
+
+    def next(self, msg):
+        # Lazy initialization:
+        if not self.transitions:
+            self.transitions = {
+                'hitGround': self.character.standing
+            }
+        return State.next(self, msg)
+
+
+class StateMachine:
     def __init__(self, initialState):
         self.currentState = initialState
         self.currentState.run()
 
-    def runAll(self, states):
-        for i in states:
-            print(i)
-            self.currentState = self.currentState.next(i)
-            self.currentState.run()
-
-
-class Standing(State):
-    def execute(self):
-        print("I am standing")
-
-
-class Movement(State):
-    def execute(self):
-        print("I am moving")
-
-
-class Jumping(State):
-    def execute(self):
-        print("I am jumping")
-
-
-class Transition():
-    def __init__(self, toState):
-        self.toState = toState
-
-    def execute(self):
-        print("transitioning...")
-
-
-class MovementTransition(Transition):
-    def __init__(self, toState, player):
-        super().__init__(toState)
-        self.player = player
-
-    def execute(self, key):
-        pass
-
-class FSM():
-    def __init__(self, char):
-        self.char = char
-        self.states = {}
-        self.transitions = {}
-        self.curState = None
-        self.curTransition = None
-
-    def setInitialState(self, name):
-        self.curState = self.states[name]
-
-    def setTransition(self, name):
-        self.curTransition = self.transitions[name]
-
-    def execute(self):
-        if self.curTransition:
-            self.curTransition.execute()
-            self.curState = self.states[self.curTransition.toState]
-            self.curTransition = None
-        self.curState.execute()
+    def next(self, msg):
+        self.currentState = self.currentState.next(msg)
+        self.currentState.run()
 
 
 class Player(Character):
-    class EventType(Enum):
-        Release = 1
-        Press = 2
-
     def __init__(self, fileName, world, rect=None, parent=None):
         super().__init__(fileName, parent)
         self.world = world
-        self.initialise()
-        self.buildInputStateMachine()
-        self.setPixmap(self.srcImage.copy(0, 0, 24, 32))
         self.velocity = QVector2D(0, 0)
+        self.acc = 0
+        self.setPixmap(self.srcImage.copy(0, 0, 24, 32))
+
         self.updateTimer = QTimer()
         self.updateTimer.timeout.connect(self.update)
-        self.updateTimer.start(50)
+        self.updateTimer.start(10)
         self.setFlag(QGraphicsItem.ItemIsFocusable, True)
         self.setFocus()
 
-    def buildInputStateMachine(self):
-        pass
+        self.initialise()
+
+    def startStateMachine(self):
+        self.falling = Falling(self)
+        self.standing = Standing(self)
+        self.jumping = Jumping(self)
+        self.sfm = StateMachine(self.falling)
 
     def keyPressEvent(self, event):
         if event.isAutoRepeat():
             return
+        if event.key() == Qt.Key_Space:
+            self.sfm.next('jump')
+
+    def getBbox(self):
+        object_ = self.world.get_object_by_name("Player")
+        self.setPos(object_.x, object_.y)
+        bbox = [object_.width, object_.height]
+        return bbox
 
     def initialise(self):
-        for object_ in self.world.objects:
-            if object_.name == 'Player':
-                self.setPos(object_.x, object_.y)
+        self.bbox = self.getBbox()
+        self.startStateMachine()
 
     def update(self):
-        self.setPos(self.x(),
-                    self.y() + 5)
+        self.velocity.y += self.acc
+        self.setPos(self.x() + self.velocity.x,
+                    self.y() + self.velocity.y)
+
+        collidingItems = self.collidingItems()
+
+        for item in collidingItems:
+            if self.world.groups['Tile Layer 1'].isAncestorOf(item):
+                self.sfm.next('hitGround')
 
 
 class QtTileMap(pytmx.TiledMap):
     def __init__(self, fileName, scene):
         super().__init__(fileName, image_loader=self.qtImageLoader)
         self.scene = scene
+        self.groups = {}
 
     def createPixmapItems(self):
         for layer in self.layers:
+            layerItem = QGraphicsPixmapItem()
+            self.groups[layer.name] = layerItem
+            self.scene.addItem(layerItem)
             try:
                 for x, y, image in layer.tiles():
-                    tileItem = QGraphicsPixmapItem()
+                    tileItem = QGraphicsPixmapItem(layerItem)
                     tileItem.setPixmap(image)
                     tileItem.setPos(x * tileItem.pixmap().width(),
                                     y * tileItem.pixmap().height())
-                    props = self.get_tile_properties(x, y,
-                                                     self.layers.index(layer))
-                    try:
-                        props['item'] = tileItem
-                    except TypeError:
-                        props = {'sceneItem': tileItem}
-                        gid = layer.data[y][x]
-                        self.set_tile_properties(gid, props)
-                    self.scene.addItem(tileItem)
+
             except AttributeError:
                 pass
 
